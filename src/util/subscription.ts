@@ -12,6 +12,11 @@ import {
   isCommit,
 } from '../lexicon/types/com/atproto/sync/subscribeRepos'
 import { Database } from '../db'
+import {ADDITIONS} from '../membership'
+import {AtpAgent} from '@atproto/api'
+import {
+  OutputSchema as ThreadPost
+} from '../lexicon/types/app/bsky/feed/getPostThread'
 
 export abstract class FirehoseSubscriptionBase {
   public sub: Subscription<RepoEvent>
@@ -34,13 +39,32 @@ export abstract class FirehoseSubscriptionBase {
     })
   }
 
-  abstract handleEvent(evt: RepoEvent): Promise<void>
+  abstract handleEvent(evt: RepoEvent, cfb): Promise<void>
 
   async run(subscriptionReconnectDelay: number) {
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+    const handle = process.env.IDENTIFIER ?? ''
+    const password = process.env.PASSWORD ?? ''
+    const uri = process.env.CFBTHREAD ?? ''
+
+    while(true) {
     try {
+      //const agent = new AtpAgent({ service: 'https://bsky.social'})
+      //await agent.login({ identifier: handle, password})
+
+      //const cfbThread = await agent.api.app.bsky.feed.getPostThread({uri})
+      const cfb = new Set()
+
+      for (let add of ADDITIONS) {
+        cfb.add(add)
+      }
+
+      console.log(` ${cfb.size} individuals added to the skyline!`)
+
       for await (const evt of this.sub) {
         try {
-          await this.handleEvent(evt)
+          await this.handleEvent(evt, cfb)
         } catch (err) {
           console.error('repo subscription could not handle message', err)
         }
@@ -50,11 +74,11 @@ export abstract class FirehoseSubscriptionBase {
         }
       }
     } catch (err) {
-      console.error('repo subscription errored', err)
-      setTimeout(() => this.run(subscriptionReconnectDelay), subscriptionReconnectDelay)
+        await delay(5000);
+        console.error('Repo subscription could not handle message. Waiting 5 seconds.', err)
     }
   }
-
+  }
   async updateCursor(cursor: number) {
     await this.db
       .updateTable('sub_state')
